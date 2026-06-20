@@ -1,0 +1,208 @@
+/**
+ * Pocket · 开机密码门禁
+ * 输入正确密码后在本设备记住，后续自动进入。
+ * 修改密码：编辑下方 BOOT_PASSWORD，或运行 node scripts/set-boot-password.js "你的密码"
+ */
+(function (global) {
+  "use strict";
+
+  /* 独立键名：勿用 pocket_ 前缀，避免导入/清空存档时被一并删除 */
+  var STORAGE_ACTIVATION = "pkt_activation_v1";
+  var LEGACY_STORAGE_ACTIVATION = "pocket_activation_v1";
+  var LEGACY_STORAGE_DEVICE = "pocket_device_id_v1";
+
+  /** @type {string} 公用开机密码（部署前请修改） */
+  var BOOT_PASSWORD = "pocket2026";
+
+  function migrateLegacyActivationStorage() {
+    try {
+      if (!localStorage.getItem(STORAGE_ACTIVATION)) {
+        var oldAct = localStorage.getItem(LEGACY_STORAGE_ACTIVATION);
+        if (oldAct) localStorage.setItem(STORAGE_ACTIVATION, oldAct);
+      }
+      if (localStorage.getItem(STORAGE_ACTIVATION) && localStorage.getItem(LEGACY_STORAGE_ACTIVATION)) {
+        localStorage.removeItem(LEGACY_STORAGE_ACTIVATION);
+      }
+    } catch (e) {}
+  }
+
+  function isProtectedLicenseStorageKey(key) {
+    return (
+      key === STORAGE_ACTIVATION ||
+      key === LEGACY_STORAGE_ACTIVATION ||
+      key === LEGACY_STORAGE_DEVICE ||
+      key === "pkt_device_id_v1"
+    );
+  }
+
+  function snapshotProtectedLicenseStorage() {
+    migrateLegacyActivationStorage();
+    var snap = { deviceId: "", activation: "" };
+    try {
+      snap.deviceId = localStorage.getItem("pkt_device_id_v1") || localStorage.getItem(LEGACY_STORAGE_DEVICE) || "";
+      snap.activation =
+        localStorage.getItem(STORAGE_ACTIVATION) || localStorage.getItem(LEGACY_STORAGE_ACTIVATION) || "";
+    } catch (e) {}
+    return snap;
+  }
+
+  function restoreProtectedLicenseStorage(snap) {
+    if (!snap || typeof snap !== "object") return;
+    try {
+      if (snap.deviceId) localStorage.setItem("pkt_device_id_v1", String(snap.deviceId));
+      if (snap.activation) localStorage.setItem(STORAGE_ACTIVATION, String(snap.activation));
+      localStorage.removeItem(LEGACY_STORAGE_ACTIVATION);
+      localStorage.removeItem(LEGACY_STORAGE_DEVICE);
+    } catch (e) {}
+  }
+
+  function readStoredActivation() {
+    try {
+      var raw =
+        localStorage.getItem(STORAGE_ACTIVATION) || localStorage.getItem(LEGACY_STORAGE_ACTIVATION) || "";
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function normalizeDeviceCode(raw) {
+    return String(raw || "")
+      .toUpperCase()
+      .replace(/[^0-9A-Z]/g, "");
+  }
+
+  /** 兼容旧版签名激活码记录 */
+  function isLegacyCryptoActivated(rec) {
+    if (!rec || !rec.code || !rec.deviceId) return false;
+    var bound = normalizeDeviceCode(rec.deviceId);
+    if (!bound) return false;
+    try {
+      var dev = normalizeDeviceCode(
+        localStorage.getItem("pkt_device_id_v1") || localStorage.getItem(LEGACY_STORAGE_DEVICE) || bound
+      );
+      return bound === dev;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isActivatedSync() {
+    migrateLegacyActivationStorage();
+    var rec = readStoredActivation();
+    if (!rec) return false;
+    if (rec.method === "password" && rec.unlocked) return true;
+    return isLegacyCryptoActivated(rec);
+  }
+
+  migrateLegacyActivationStorage();
+
+  (function earlyGate() {
+    if (isActivatedSync()) return;
+    try {
+      document.documentElement.classList.add("pocket-awaiting-activation");
+    } catch (e) {}
+  })();
+
+  function verifyBootPassword(raw) {
+    return String(raw || "").trim() === String(BOOT_PASSWORD);
+  }
+
+  function persistPasswordUnlock() {
+    try {
+      localStorage.setItem(
+        STORAGE_ACTIVATION,
+        JSON.stringify({
+          method: "password",
+          unlocked: true,
+          at: Date.now(),
+        })
+      );
+      localStorage.removeItem(LEGACY_STORAGE_ACTIVATION);
+    } catch (e) {}
+  }
+
+  function ensureGateDom() {
+    if (document.getElementById("pocket-activation-gate")) return;
+    var gate = document.createElement("div");
+    gate.id = "pocket-activation-gate";
+    gate.setAttribute("role", "dialog");
+    gate.setAttribute("aria-modal", "true");
+    gate.setAttribute("aria-label", "进入 Pocket");
+    gate.innerHTML =
+      '<div class="pocket-act-card">' +
+      '<h1 class="pocket-act-brand">Pocket</h1>' +
+      '<p class="pocket-act-sub">请输入密码进入</p>' +
+      '<label class="pocket-act-label" for="pocketActInput">密码</label>' +
+      '<input type="password" class="pocket-act-input" id="pocketActInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="输入密码" />' +
+      '<p class="pocket-act-hint">输入一次后在本设备自动记住，无需每次输入。</p>' +
+      '<p class="pocket-act-error" id="pocketActError" aria-live="polite"></p>' +
+      '<button type="button" class="pocket-act-submit" id="pocketActSubmit">进入</button>' +
+      "</div>";
+    document.body.appendChild(gate);
+  }
+
+  function showGate() {
+    document.documentElement.classList.add("pocket-awaiting-activation");
+    ensureGateDom();
+    var input = document.getElementById("pocketActInput");
+    var errEl = document.getElementById("pocketActError");
+    var submit = document.getElementById("pocketActSubmit");
+    if (!submit || submit.dataset.bound === "1") return;
+    submit.dataset.bound = "1";
+
+    function setError(msg) {
+      if (errEl) errEl.textContent = msg || "";
+    }
+
+    function doUnlock() {
+      if (!input) return;
+      var pwd = String(input.value || "");
+      if (!pwd.trim()) {
+        setError("请输入密码");
+        return;
+      }
+      setError("");
+      if (!verifyBootPassword(pwd)) {
+        setError("密码错误");
+        try {
+          input.value = "";
+          input.focus();
+        } catch (e) {}
+        return;
+      }
+      persistPasswordUnlock();
+      document.documentElement.classList.remove("pocket-awaiting-activation");
+      global.dispatchEvent(new CustomEvent("pocket-activated"));
+    }
+
+    submit.addEventListener("click", doUnlock);
+    if (input) {
+      input.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") doUnlock();
+      });
+      try {
+        input.focus();
+      } catch (e) {}
+    }
+  }
+
+  function boot() {
+    if (isActivatedSync()) {
+      document.documentElement.classList.remove("pocket-awaiting-activation");
+      return;
+    }
+    showGate();
+  }
+
+  if (document.body) boot();
+  else document.addEventListener("DOMContentLoaded", boot);
+
+  global.PocketActivation = {
+    isActivated: isActivatedSync,
+    isProtectedStorageKey: isProtectedLicenseStorageKey,
+    snapshotProtectedStorage: snapshotProtectedLicenseStorage,
+    restoreProtectedStorage: restoreProtectedLicenseStorage,
+  };
+})(typeof window !== "undefined" ? window : globalThis);

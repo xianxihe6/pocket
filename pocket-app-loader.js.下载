@@ -1,0 +1,111 @@
+/**
+ * 激活后加载主应用：并行 fetch JS，按序 Function 执行（DOM 无 script src，另存为不会打包 assets 大文件）。
+ * CSS 由 embed.html 的 link 负责，保持正常网速。
+ */
+(function () {
+  "use strict";
+
+  window.__POCKET_LIVE__ = true;
+
+  var LIVE_GUARD =
+    'try{if(!window.__POCKET_LIVE__||location.protocol==="file:"||!/^https?:$/i.test(location.protocol))return;}catch(e){}\n';
+
+  function parseScripts() {
+    try {
+      var raw = document.documentElement.getAttribute("data-pocket-scripts");
+      if (!raw) return [];
+      return JSON.parse(raw);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function scriptUrl(item) {
+    var u = String(item.src || "").replace(/^\//, "");
+    return u + (item.v ? "?v=" + item.v : "");
+  }
+
+  function showBootError(msg) {
+    var boot = document.getElementById("pocket-boot");
+    if (boot) {
+      boot.className = "pocket-boot-err";
+      boot.textContent = msg;
+      return;
+    }
+    document.body.innerHTML =
+      '<div style="padding:24px;text-align:center;color:#8b7fd4;line-height:1.6;font-family:system-ui,sans-serif">' +
+      msg +
+      "</div>";
+  }
+
+  function execFetched(code, url) {
+    var runner = new Function(LIVE_GUARD + "\n//# sourceURL=" + url + "\n" + code);
+    runner();
+  }
+
+  function preloadScripts(list) {
+    var i, link, href;
+    for (i = 0; i < list.length; i++) {
+      href = scriptUrl(list[i]);
+      if (document.querySelector('link[data-pocket-preload="' + href + '"]')) continue;
+      link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "script";
+      link.href = href;
+      link.setAttribute("data-pocket-preload", href);
+      document.head.appendChild(link);
+    }
+  }
+
+  function fetchOne(item) {
+    var url = scriptUrl(item);
+    /* 勿用 no-cache：每次打开都会重新拉取 ~2MB 主 JS。URL 带 ?v= 部署版本，配合 _headers 走磁盘缓存，第二次起秒开 */
+    return fetch(url, { credentials: "same-origin" }).then(function (res) {
+      if (!res.ok) throw new Error("加载失败: " + url);
+      return res.text().then(function (code) {
+        return { url: url, code: code };
+      });
+    });
+  }
+
+  function loadScripts(list) {
+    if (!list.length) return Promise.resolve();
+    preloadScripts(list);
+    return Promise.all(list.map(fetchOne)).then(function (parts) {
+      var i;
+      for (i = 0; i < parts.length; i++) {
+        execFetched(parts[i].code, parts[i].url);
+      }
+      try {
+        if (typeof window.schedulePocketHomeScreenLayoutRefresh === "function") {
+          window.schedulePocketHomeScreenLayoutRefresh();
+        } else if (typeof window.refreshPocketHomeScreenLayout === "function") {
+          window.refreshPocketHomeScreenLayout();
+        }
+      } catch (eLayout) {}
+    });
+  }
+
+  function start() {
+    var list = parseScripts();
+    var boot = document.getElementById("pocket-boot");
+    if (boot) boot.textContent = "正在加载…";
+    loadScripts(list).catch(function (err) {
+      showBootError((err && err.message) || "加载失败，请刷新重试");
+    });
+  }
+
+  function tryStart() {
+    if (window.PocketActivation && window.PocketActivation.isActivated()) {
+      start();
+      return true;
+    }
+    return false;
+  }
+
+  if (!tryStart()) {
+    window.addEventListener("pocket-activated", function () {
+      tryStart();
+    }, { once: true });
+  }
+})();

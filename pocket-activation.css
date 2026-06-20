@@ -1,0 +1,156 @@
+/* Pocket · 激活门禁（未激活时覆盖全屏） */
+html.pocket-awaiting-activation body > .phone-wrap,
+html.pocket-awaiting-activation body > #pocket-calendar-app,
+html.pocket-awaiting-activation body > #pocket-time-picker-backdrop,
+html.pocket-awaiting-activation body > #pocket-cal-rw-modal,
+html.pocket-awaiting-activation body > #pocket-time-picker,
+html.pocket-awaiting-activation body > .toast {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#pocket-activation-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: linear-gradient(165deg, #f5f2ff 0%, #ebe4ff 45%, #f8eef8 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: #2a2438;
+}
+
+html.pocket-awaiting-activation #pocket-activation-gate {
+  display: flex;
+}
+
+.pocket-act-card {
+  width: 100%;
+  max-width: 340px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 20px;
+  padding: 28px 22px 24px;
+  box-shadow: 0 12px 40px rgba(120, 90, 180, 0.14);
+  box-sizing: border-box;
+}
+
+.pocket-act-brand {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+  color: #4a3d68;
+}
+
+.pocket-act-sub {
+  text-align: center;
+  font-size: 13px;
+  color: #7a6f92;
+  margin: 0 0 22px;
+  line-height: 1.45;
+}
+
+.pocket-act-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b5f88;
+  margin: 0 0 6px;
+}
+
+.pocket-act-device-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.pocket-act-device-code {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  padding: 12px 10px;
+  border-radius: 12px;
+  background: #f3effa;
+  color: #3d3258;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.pocket-act-copy {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #e8dff5;
+  color: #5a4a78;
+  cursor: pointer;
+}
+
+.pocket-act-copy:active {
+  opacity: 0.85;
+}
+
+.pocket-act-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ddd5ee;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+  margin: 0 0 8px;
+  background: #fff;
+  color: #2a2438;
+  outline: none;
+}
+
+.pocket-act-input:focus {
+  border-color: #b49ae8;
+  box-shadow: 0 0 0 3px rgba(180, 154, 232, 0.25);
+}
+
+.pocket-act-hint {
+  font-size: 12px;
+  color: #8a7da8;
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.pocket-act-error {
+  font-size: 12px;
+  color: #c44b6a;
+  min-height: 18px;
+  margin: 0 0 10px;
+}
+
+.pocket-act-submit {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #9b7fd9 0%, #7b5fbf 55%, #6a4fad 100%);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(107, 79, 173, 0.35);
+}
+
+.pocket-act-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pocket-act-submit:not(:disabled):active {
+  transform: scale(0.98);
+}
